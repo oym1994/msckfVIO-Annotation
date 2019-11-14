@@ -125,8 +125,11 @@ Shows current features in the map which is used for estimation.
 
 
 对程序进行了注释,并加入记录时间的函数,将各个子函数的运行时间记录输出到txt文件中,如果不需要,请进行以下操作:
+
 **1**在msckf-vio.cpp第31,32行将条件编译的标志record_runtime(记录程序函数运行时间)置0,show_state(记录状态窗口中cam的ID)置0.
+
 **2** image_processor.cpp第25行record_tracking_time置为0. 
+
 如果需要,除了将相应的条件编译置为1,还需要修改文件存放位置:
 image_processor.cpp的第255行
 msckf-vio.cpp的第382,383,393行,修改成自己的路径即可
