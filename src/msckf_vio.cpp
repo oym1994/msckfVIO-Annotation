@@ -28,8 +28,8 @@
 #include <msckf_vio/math_utils.hpp>
 #include <msckf_vio/utils.h>
 
-#define show_state 0
-#define record_runtime 0
+#define show_state 1
+#define record_runtime 1
 
 using namespace std;
 using namespace Eigen;
@@ -70,7 +70,6 @@ ofstream Runtime_File, Pruncam_File;
 
 #if show_state
 ofstream OutFile;
-OutFile.open("/media/oym/source/oym/MSCKF_VIO/output.txt",ios::app);
 #endif
 
 MsckfVio::MsckfVio(ros::NodeHandle& pnh):
@@ -83,7 +82,7 @@ MsckfVio::MsckfVio(ros::NodeHandle& pnh):
 bool MsckfVio::loadParameters() {
   // Frame id
   nh.param<string>("fixed_frame_id", fixed_frame_id, "world");  //固定坐标系是world
-  nh.param<string>("child_frame_id", child_frame_id, "robot");  //子坐标系是robot,何为子坐标系?
+  nh.param<string>("child_frame_id", child_frame_id, "robot");  //子坐标系是robot,何为子坐标系,就是机体坐标系,也就是IMU坐标系?
   nh.param<bool>("publish_tf", publish_tf, true);               //发布坐标转换
   nh.param<double>("frame_rate", frame_rate, 40.0);             //帧率设置为40
   nh.param<double>("position_std_threshold", position_std_threshold, 8.0);  //位置标准差阈值设为8,如果IMU位置标准差超过这个阈值进行重置
@@ -201,7 +200,7 @@ bool MsckfVio::loadParameters() {
 
 bool MsckfVio::createRosIO() {
   odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);  //注册发布里程计信息
-  feature_pub = nh.advertise<sensor_msgs::PointCloud2>(     //注册发布特征点云信息
+  feature_pub = nh.advertise<sensor_msgs::PointCloud2>(     //media/oym/source/oym/MSCKF_VIO//注册发布特征点云信息
       "feature_point_cloud", 10);
 
   reset_srv = nh.advertiseService("reset",
@@ -281,7 +280,7 @@ void MsckfVio::initializeGravityAndBias() {
   state_server.imu_state.gyro_bias =
     sum_angular_vel / imu_msg_buffer.size();  //静态初始化角速度的bias
   //IMUState::gravity =
-  //  -sum_linear_acc / imu_msg_buffer.size();
+  //  -sum_linear_acc / imu_msg_buffer.size();show_state
   // This is the gravity in the IMU frame.
   Vector3d gravity_imu =
     sum_linear_acc / imu_msg_buffer.size();   //静态初始化IMU系里的重力
@@ -379,17 +378,21 @@ void MsckfVio::featureCallback(
   if (!is_gravity_set) return;
 
 #if record_runtime
-  camID++;
   if(camID == 1) {
-      Runtime_File.open("/media/oym/source/oym/MSCKF_VIO/VIO_Runtime.txt",ios::app);
-      Pruncam_File.open("/media/oym/source/oym/MSCKF_VIO/Pruncam_Runtime.txt",ios::app);
+      Runtime_File.open("/home/oym/msckf-vio-annotation/src/generated_files/VIO_Runtime.txt",ios::app);
+      Pruncam_File.open("/home/oym/msckf-vio-annotation/src/generated_files/Pruncam_Runtime.txt",ios::app);
   }
 
 #endif
 
-#if show_state
   camID++;
-  printf("进入featureCallback函数的次数: %u",camID);
+//printf("进入featureCallback函数的次数: %u",camID);
+
+#if show_state
+  if(!OutFile.is_open()) {
+      OutFile.open("/home/oym/msckf-vio-annotation/src/generated_files/outfile.txt",ios::app);
+      printf("outFile opened");
+  }
 #endif
   // Start the system if the first image is received.
   // The frame where the first image is received will be
@@ -397,6 +400,7 @@ void MsckfVio::featureCallback(
   if (is_first_img) {
     is_first_img = false;
     state_server.imu_state.time = msg->header.stamp.toSec();
+
   }
 
   static double max_processing_time = 0.0;
@@ -529,11 +533,14 @@ void MsckfVio::featureCallback(
   }
 //打印状态信息:
 #if show_state
- if(camID==1000&&OutFile.is_open()) OutFile.close();
+ if(camID==1000&&OutFile.is_open()) {
+     OutFile.close();
+     printf("outFile closed");
+ }
 #endif
 
 #if record_runtime
- if(camID<=1000){
+ if(camID<=2000){
   augmentation_time=augmentation_time+state_augmentation_time;
   observations_time=observations_time+add_observations_time;
   imuprocess_time=imuprocess_time+imu_processing_time;
@@ -719,7 +726,7 @@ void MsckfVio::processModel(const double& time,
   // Propogate the state using 4th order Runge-Kutta
   predictNewState(dtime, gyro, acc);
 
-  // Modify the transition matrix  为何修改误差转移矩阵,减去重力部分的影响?
+  // Modify the transition matrix  见论文<Observability-constrained Vision-aided Inertial Navigation>的 4.1.1
   Matrix3d R_kk_1 = quaternionToRotation(imu_state.orientation_null); //orientation_null就是上一帧图像时刻的orientation?
   Phi.block<3, 3>(0, 0) =
     quaternionToRotation(imu_state.orientation) * R_kk_1.transpose();  //前后两IMU时刻的rotation之差,也就是上一IMU时刻到当前时刻的旋转量?
@@ -988,7 +995,7 @@ void MsckfVio::measurementJacobian(
   H_x = dz_dpc0*dpc0_dxc + dz_dpc1*dpc1_dxc;
   H_f = dz_dpc0*dpc0_dpg + dz_dpc1*dpc1_dpg;
 
-  // Modifty the measurement Jacobian to ensure  //这一点没看懂,论文里也没提及
+  // Modifty the measurement Jacobian to ensure  //论文<Observability-constrained Vision-aided Inertial Navigation>
   // observability constrain.
   Matrix<double, 4, 6> A = H_x;
   Matrix<double, 6, 1> u = Matrix<double, 6, 1>::Zero();
@@ -1109,7 +1116,6 @@ void MsckfVio::measurementUpdate(
   // Compute the Kalman gain.
   const MatrixXd& P = state_server.state_cov;
 
-//if(OutFile.is_open()) OutFile<<"H_thin = "<<endl<<H_thin<<endl;  //到这一步H_thin第0~25和倒数6列均为0,也就是观测残差与IMU和最新一帧图像均无关
 
   MatrixXd S = H_thin*P*H_thin.transpose() +
       Feature::observation_noise*MatrixXd::Identity(
@@ -1121,8 +1127,6 @@ void MsckfVio::measurementUpdate(
 
   // Compute the error of the state.
   VectorXd delta_x = K * r_thin;
-
-//  if(OutFile.is_open()) OutFile<<"S = "<<endl<<S<<endl;
 
 
   // Update the IMU state.
@@ -1150,7 +1154,7 @@ void MsckfVio::measurementUpdate(
   state_server.imu_state.position += delta_x_imu.segment<3>(12);
 
 #if show_state
-  if(OutFile.is_open()) OutFile<<"修正的IMU旋转量"<<dq_imu.transpose()<<"修正的IMU位移"<<delta_x_imu.segment<3>(12).transpose()<<endl;
+  if(OutFile.is_open()) OutFile<<"修正的IMU旋转量"<<dq_imu.transpose()<<endl<<"修正的IMU位移"<<delta_x_imu.segment<3>(12).transpose()<<endl;
 #endif
   const Vector4d dq_extrinsic =
     smallAngleQuaternion(delta_x_imu.segment<3>(15));
@@ -1168,8 +1172,10 @@ void MsckfVio::measurementUpdate(
         dq_cam, cam_state_iter->second.orientation);
     cam_state_iter->second.position += delta_x_cam.tail<3>();
 #if show_state
+    if(i ==state_server.cam_states.size()-2)
+        if(OutFile.is_open()) OutFile<<"最新帧的上一帧的位置修正量:"<<endl<<delta_x_cam.tail<3>().transpose() <<endl<<"四元数修正量"<<endl<<dq_cam.transpose()<<endl;
     if(i ==state_server.cam_states.size()-1)
-        if(OutFile.is_open()) OutFile<<"最新帧的位置修正量:"<<endl<<delta_x_cam.tail<3>().transpose() <<"四元数修正量"<<endl<<dq_cam.transpose()<<endl;
+        if(OutFile.is_open()) OutFile<<"最新帧的位置修正量:"<<endl<<delta_x_cam.tail<3>().transpose()<<endl <<"四元数修正量"<<endl<<dq_cam.transpose()<<endl;
 #endif
   }
 

@@ -22,7 +22,7 @@ using namespace std;
 using namespace cv;
 using namespace Eigen;
 
-#define record_tracking_time 0
+#define record_tracking_time 1
 
 #if record_tracking_time
 ofstream Runtime_File;
@@ -111,7 +111,7 @@ bool ImageProcessor::loadParameters() {
   t_cam1_imu = -R_imu_cam1.t() * t_imu_cam1;
 
   // Processor parameters
-  nh.param<int>("grid_row", processor_config.grid_row, 4);
+  nh.param<int>("grid_row", processor_config.grid_row, 4); //如果参数服务器里有相关名称的参数,则从参数服务器里获取,否则设为最后的参数4
   nh.param<int>("grid_col", processor_config.grid_col, 4);
   nh.param<int>("grid_min_feature_num",
       processor_config.grid_min_feature_num, 2);
@@ -252,7 +252,7 @@ void ImageProcessor::stereoCallback(
     drawFeaturesStereo();  //绘制
     //ROS_INFO("Draw features: %f",
 #if record_tracking_time
-    Runtime_File.open("/media/oym/source/oym/MSCKF_VIO/tracking_time.txt");
+    Runtime_File.open("/home/oym/msckf-vio-annotation/src/generated_files/tracking_time.txt");
     Runtime_File<<"first_frametime:"<<first_frametime<<endl;
 #endif
 
@@ -1465,7 +1465,7 @@ void ImageProcessor::drawFeaturesMono() {
 
 void ImageProcessor::drawFeaturesStereo() {
 
-  if(debug_stereo_pub.getNumSubscribers() > 0)
+  if(debug_stereo_pub.getNumSubscribers() > 0)  //该话题订阅者数量大于1,才执行下面的操作
   {
     // Colors for different features.
     Scalar tracked(0, 255, 0);

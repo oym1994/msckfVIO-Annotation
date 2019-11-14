@@ -124,10 +124,12 @@ Odometry of the IMU frame including a proper covariance.
 Shows current features in the map which is used for estimation.
 
 
-对程序进行了注释,并加入记录时间的函数,将各个子函数的运行时间记录输出到txt文件中,如果不需要,在msckf-vio.cpp第31,32行将条件编译的标志record_runtime置0,另一个show_state是是否需要将运行过程状态记录,主要记录状态窗口中cam的ID,image_processor.cpp第25行record_tracking_time置为0.
+对程序进行了注释,并加入记录时间的函数,将各个子函数的运行时间记录输出到txt文件中,如果不需要,请进行以下操作:
+**1**在msckf-vio.cpp第31,32行将条件编译的标志record_runtime(记录程序函数运行时间)置0,show_state(记录状态窗口中cam的ID)置0.
+**2** image_processor.cpp第25行record_tracking_time置为0. 
 如果需要,除了将相应的条件编译置为1,还需要修改文件存放位置:
-image_processor.cpp的第253行
-msckf-vio.cpp的第73,384,385行,修改成自己的路径即可
+image_processor.cpp的第255行
+msckf-vio.cpp的第382,383,393行,修改成自己的路径即可
 
 
 本人研究方向视觉SLAM,VIO,欢迎交流,微信Ouym1994,备注msckf-vio.
