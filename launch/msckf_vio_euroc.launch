@@ -58,4 +58,6 @@
     </node>
   </group>
 
+  <node name="rvizvisualisation" pkg="rviz" type="rviz" output="log" args="-d $(find msckf_vio)/rviz/rviz_euroc_config.rviz" />
+
 </launch>

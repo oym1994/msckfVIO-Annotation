@@ -27,6 +27,8 @@
 #include <msckf_vio/msckf_vio.h>
 #include <msckf_vio/math_utils.hpp>
 #include <msckf_vio/utils.h>
+#include <msckf_vio/utility.h>
+nav_msgs::Path path;
 
 #define show_state 1
 #define record_runtime 1
@@ -84,7 +86,7 @@ bool MsckfVio::loadParameters() {
   nh.param<string>("fixed_frame_id", fixed_frame_id, "world");  //固定坐标系是world
   nh.param<string>("child_frame_id", child_frame_id, "robot");  //子坐标系是robot,何为子坐标系,就是机体坐标系,也就是IMU坐标系?
   nh.param<bool>("publish_tf", publish_tf, true);               //发布坐标转换
-  nh.param<double>("frame_rate", frame_rate, 40.0);             //帧率设置为40
+  nh.param<double>("frame_rate", frame_rate, 40.0);             //帧率设置为40但yaw应该还不能确定
   nh.param<double>("position_std_threshold", position_std_threshold, 8.0);  //位置标准差阈值设为8,如果IMU位置标准差超过这个阈值进行重置
 
   nh.param<double>("rotation_threshold", rotation_threshold, 0.2618);       //旋转阈值设为0.2618,用于决定关键帧
@@ -215,6 +217,9 @@ bool MsckfVio::createRosIO() {
       &MsckfVio::mocapOdomCallback, this);         //注册订阅mocap_odom信息,这是啥?
   mocap_odom_pub = nh.advertise<nav_msgs::Odometry>("gt_odom", 1);  //注册发布gt_odom信息
 
+  pub_path = nh.advertise<nav_msgs::Path>("path", 1000);
+
+
   return true;
 }
 
@@ -287,11 +292,18 @@ void MsckfVio::initializeGravityAndBias() {
   // Initialize the initial orientation, so that the estimation
   // is consistent with the inertial frame.
   double gravity_norm = gravity_imu.norm();
+  //修改此处,使得其与VINS的初始旋转一致
   IMUState::gravity = Vector3d(0.0, 0.0, -gravity_norm);  //世界坐标系下的gravity
   Quaterniond q0_i_w = Quaterniond::FromTwoVectors(
     gravity_imu, -IMUState::gravity);         //初始化世界系到imu系的旋转矩阵
+  Eigen::Matrix3d R0 = q0_i_w.toRotationMatrix();
+  double yaw = Utility::R2ypr(R0).x();
+  R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0;
   state_server.imu_state.orientation =
-    rotationToQuaternion(q0_i_w.toRotationMatrix().transpose());
+     rotationToQuaternion(R0);//这是原来的
+
+//  state_server.imu_state.orientation =
+//    rotationToQuaternion(q0_i_w.toRotationMatrix().transpose());//这是原来的
   return;
 }
 
@@ -1632,6 +1644,16 @@ void MsckfVio::publish(const ros::Time& time) {
       odom_msg.twist.covariance[i*6+j] = P_body_vel(i, j);
 
   odom_pub.publish(odom_msg);
+
+  //自加函数,发布path
+  geometry_msgs::PoseStamped pose_stamped;
+  pose_stamped.header = odom_msg.header;
+  pose_stamped.header.frame_id = "world";
+  pose_stamped.pose = odom_msg.pose.pose;
+  path.header = odom_msg.header;
+  path.header.frame_id = "world";
+  path.poses.push_back(pose_stamped);
+  pub_path.publish(path);
 
   // Publish the 3D positions of the features that
   // has been initialized.

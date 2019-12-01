@@ -829,6 +829,7 @@ void ImageProcessor::addNewFeatures() {
       row*processor_config.grid_col+col].push_back(feature);
   }
 
+  //先在每个网格块里提取grid_max_feature_num个新特征点
   new_features.clear();
   for (auto& item : new_feature_sieve) {
     if (item.size() > processor_config.grid_max_feature_num) {
@@ -843,7 +844,7 @@ void ImageProcessor::addNewFeatures() {
   int detected_new_features = new_features.size();
 
   // Find the stereo matched points for the newly
-  // detected features.
+  // detected features. 寻找右图中的匹配点
   vector<cv::Point2f> cam0_points(new_features.size());
   for (int i = 0; i < new_features.size(); ++i)
     cam0_points[i] = new_features[i].pt;
@@ -905,10 +906,10 @@ void ImageProcessor::addNewFeatures() {
     vector<FeatureMetaData>& new_features_this_grid = grid_new_features[code];
 
     if (features_this_grid.size() >=
-        processor_config.grid_min_feature_num) continue;
+        processor_config.grid_min_feature_num) continue;  //如果该网格块里数量够多,就不填加新的特征点
 
     int vacancy_num = processor_config.grid_min_feature_num -
-      features_this_grid.size();
+      features_this_grid.size();  //如果网格块里特征点不够多,则补充新的特征点
     for (int k = 0;
         k < vacancy_num && k < new_features_this_grid.size(); ++k) {
       features_this_grid.push_back(new_features_this_grid[k]);
