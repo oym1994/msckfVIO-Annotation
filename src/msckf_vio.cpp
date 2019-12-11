@@ -153,11 +153,11 @@ bool MsckfVio::loadParameters() {
     state_server.state_cov(i, i) = extrinsic_translation_cov;
 
   // Transformation offsets between the frames involved.获得相机0与imu之间的外参
-  Isometry3d T_imu_cam0 = utils::getTransformEigen(nh, "cam0/T_cam_imu");
-  Isometry3d T_cam0_imu = T_imu_cam0.inverse();
+  Isometry3d T_imu_cam0 = utils::getTransformEigen(nh, "cam0/T_cam_imu");  //T_imu_cam0将向量从IMU系变换到cam0,也是从cam0转到IMU
+  Isometry3d T_cam0_imu = T_imu_cam0.inverse();  //
 
-  state_server.imu_state.R_imu_cam0 = T_cam0_imu.linear().transpose();
-  state_server.imu_state.t_cam0_imu = T_cam0_imu.translation();
+  state_server.imu_state.R_imu_cam0 = T_cam0_imu.linear().transpose(); //  R_imu_cam0将向量从IMU系旋转变换到cam0,也是从cam0旋转到IMU
+  state_server.imu_state.t_cam0_imu = T_cam0_imu.translation();  //cam0坐标系原点在IMU坐标系中的位置
   CAMState::T_cam0_cam1 =
     utils::getTransformEigen(nh, "cam1/T_cn_cnm1");  //获得双目之间的外参
   IMUState::T_imu_body =
@@ -857,15 +857,15 @@ void MsckfVio::predictNewState(const double& dt,
 //增加新的cam协方差矩阵信息,更新协方差的时候没见到更新IMU与上一帧的协方差,应该不严谨
 void MsckfVio::stateAugmentation(const double& time) {
 
-  const Matrix3d& R_i_c = state_server.imu_state.R_imu_cam0;
+  const Matrix3d& R_i_c = state_server.imu_state.R_imu_cam0; //  R_imu_cam0将向量从IMU系旋转变换到cam0,也是从cam0旋转到IMU
   const Vector3d& t_c_i = state_server.imu_state.t_cam0_imu; //相机中心在IMU坐标系下的投影
 
   // Add a new camera state to the state server.
   Matrix3d R_w_i = quaternionToRotation(
-      state_server.imu_state.orientation);  //imu在w坐标系中的pose,从w到imu的旋转
-  Matrix3d R_w_c = R_i_c * R_w_i;           //cam0在w系中的pose
+      state_server.imu_state.orientation);  //imu在w坐标系中的pose,从w到imu的旋转,将向量从IMU转到w系,但应该是将向量从w转到imu系?
+  Matrix3d R_w_c = R_i_c * R_w_i;           //cam0在w系中的pose,将向量从w转到camera系
   Vector3d t_c_w = state_server.imu_state.position +
-    R_w_i.transpose()*t_c_i;   //相机中心在w中的坐标or平移矩阵?
+    R_w_i.transpose()*t_c_i;   //相机中心在w中的坐标
 
   state_server.cam_states[state_server.imu_state.id] =
     CAMState(state_server.imu_state.id);
